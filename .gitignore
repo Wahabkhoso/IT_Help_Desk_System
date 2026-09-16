@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# App-generated data (created automatically on first run — should not be
+# committed, since it's per-user/per-machine data, not source code)
+database/helpdesk.db
+reports/*.pdf
+reports/outbox/
+
+# PyInstaller build output (large, regenerated from source with build.bat)
+build/
+dist/
+*.spec.bak
+
+# Editor/OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

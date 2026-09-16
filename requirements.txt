@@ -1,0 +1,6 @@
+reportlab>=4.0.0
+matplotlib>=3.7.0
+
+# Only needed if you want to build a standalone .exe (see README:
+# "Building a Standalone Windows .exe")
+pyinstaller>=6.0.0
