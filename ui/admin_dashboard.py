@@ -15,7 +15,6 @@ from services.ticket_service import TicketService
 from services.report_service import ReportService
 from utils.validators import ValidationError
 from utils import theme
-from utils import email_service
 from ui.sidebar import Sidebar
 from ui.widgets import (
     PrimaryButton, SecondaryButton, DangerButton, Card, StatCard, TopBar,
@@ -464,35 +463,22 @@ class UserFormView(tk.Frame):
         self.username_entry = tk.Entry(pad, font=theme.FONT_BODY, width=38)
         self.username_entry.pack(pady=(2, 10), ipady=4)
 
-        # Credentials section — a fixed slot in the layout that holds EITHER
-        # the manual password field OR an explanatory note, depending on
-        # role. Support staff get an auto-generated + emailed password
-        # instead of a manually typed one.
-        self.credentials_slot = tk.Frame(pad, bg=theme.CARD_BG)
-        self.credentials_slot.pack(fill="x")
-
-        self.password_frame = tk.Frame(self.credentials_slot, bg=theme.CARD_BG)
-        self.password_label = tk.Label(
-            self.password_frame,
+        # Password field — always shown; the admin sets it directly for
+        # every role, including support staff.
+        password_frame = tk.Frame(pad, bg=theme.CARD_BG)
+        password_frame.pack(fill="x")
+        tk.Label(
+            password_frame,
             text="Password" + (" (leave blank to keep)" if existing_user else ""),
-            bg=theme.CARD_BG, font=theme.FONT_BODY_BOLD)
-        self.password_label.pack(anchor="w")
-        self.password_entry = tk.Entry(self.password_frame, font=theme.FONT_BODY, width=38, show="•")
+            bg=theme.CARD_BG, font=theme.FONT_BODY_BOLD).pack(anchor="w")
+        self.password_entry = tk.Entry(password_frame, font=theme.FONT_BODY, width=38, show="•")
         self.password_entry.pack(pady=(2, 10), ipady=4)
-
-        self.auto_password_note = tk.Label(
-            self.credentials_slot,
-            text="A secure temporary password will be generated automatically\n"
-                 "and emailed to this address.",
-            bg=theme.CARD_BG, font=theme.FONT_SMALL, fg=theme.TEXT_MUTED,
-            justify="left")
 
         tk.Label(pad, text="Role", bg=theme.CARD_BG, font=theme.FONT_BODY_BOLD).pack(anchor="w")
         self.role_combo = ttk.Combobox(pad, values=["admin", "employee", "staff"],
                                         state="readonly" if not force_role else "disabled", width=35)
         self.role_combo.pack(pady=(2, 10), ipady=3)
         self.role_combo.set(force_role or "employee")
-        self.role_combo.bind("<<ComboboxSelected>>", lambda e: self._toggle_password_field())
 
         tk.Label(pad, text="Department", bg=theme.CARD_BG, font=theme.FONT_BODY_BOLD).pack(anchor="w")
         self.dept_entry = tk.Entry(pad, font=theme.FONT_BODY, width=38)
@@ -517,23 +503,9 @@ class UserFormView(tk.Frame):
         PrimaryButton(btn_row, "Save", command=self._save).pack(side="left")
         SecondaryButton(btn_row, "Cancel", command=self._go_back).pack(side="left", padx=(8, 0))
 
-        self._toggle_password_field()
-
     def _go_back(self):
         if self.on_close:
             self.on_close()
-
-    def _toggle_password_field(self):
-        """Staff accounts get an auto-generated + emailed password, so we
-        hide the manual password entry and show an explanatory note instead.
-        Editing an existing staff account still allows a manual override."""
-        is_new_staff = (self.role_combo.get() == "staff") and (self.existing_user is None)
-        self.password_frame.pack_forget()
-        self.auto_password_note.pack_forget()
-        if is_new_staff:
-            self.auto_password_note.pack(anchor="w", pady=(0, 10))
-        else:
-            self.password_frame.pack(fill="x")
 
     def _save(self):
         try:
@@ -545,37 +517,20 @@ class UserFormView(tk.Frame):
                     department=self.dept_entry.get(),
                     phone=self.phone_entry.get(),
                 )
-                if self.password_frame.winfo_ismapped() and self.password_entry.get():
+                if self.password_entry.get():
                     self.auth_service.reset_password(self.existing_user.user_id, self.password_entry.get())
-                show_success("User saved successfully.")
             else:
-                role = self.role_combo.get()
-                manual_password = self.password_entry.get() if self.password_frame.winfo_ismapped() else None
-                user_id, generated_password = self.auth_service.create_user(
+                self.auth_service.create_user(
                     full_name=self.name_entry.get(),
                     email=self.email_entry.get(),
                     username=self.username_entry.get(),
-                    password=manual_password,
-                    role=role,
+                    password=self.password_entry.get(),
+                    role=self.role_combo.get(),
                     department=self.dept_entry.get(),
                     phone=self.phone_entry.get(),
                 )
 
-                if role == "staff" and generated_password:
-                    sent, message = email_service.send_staff_welcome_email(
-                        self.email_entry.get().strip(),
-                        self.name_entry.get().strip(),
-                        self.username_entry.get().strip(),
-                        generated_password,
-                    )
-                    if sent:
-                        show_success("Staff account created. Login credentials were emailed "
-                                      f"to {self.email_entry.get().strip()}.")
-                    else:
-                        show_success("Staff account created. " + message)
-                else:
-                    show_success("User saved successfully.")
-
+            show_success("User saved successfully.")
             if self.on_close:
                 self.on_close()
         except ValidationError as e:

@@ -48,22 +48,15 @@ class AuthService:
     # ------------------------------------------------------------------
     def create_user(self, full_name, email, username, password, role,
                      department=None, phone=None):
-        """Creates a user account. If password is None/empty, a secure
-        temporary password is auto-generated (used when an admin adds a
-        support staff account, so credentials can be emailed instead of
-        typed in). Returns (user_id, password_used)."""
+        """Creates a user account with an admin-chosen password. Returns
+        the new user_id."""
         if not is_non_empty(full_name):
             raise ValidationError("Full name is required.")
         if not is_valid_email(email):
             raise ValidationError("A valid email is required.")
         if not is_valid_username(username):
             raise ValidationError("Username must be 3-30 chars (letters, numbers, _ or .).")
-
-        auto_generated = False
-        if not password:
-            password = generate_temp_password()
-            auto_generated = True
-        elif len(password) < 6:
+        if not password or len(password) < 6:
             raise ValidationError("Password must be at least 6 characters.")
 
         if role not in ("admin", "employee", "staff"):
@@ -95,7 +88,7 @@ class AuthService:
                 (user_id, department or "General"),
             )
 
-        return user_id, (password if auto_generated else None)
+        return user_id
 
     def update_user(self, user_id, full_name=None, email=None, department=None,
                      phone=None, is_active=None):
