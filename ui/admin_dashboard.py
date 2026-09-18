@@ -326,14 +326,37 @@ class AdminDashboard(tk.Frame):
         widths = {"id": 60, "name": 160, "username": 120, "specialty": 140, "pending": 80, "completed": 90}
         frame, tree = styled_treeview(table_card, columns, headings, widths)
         frame.pack(fill="both", expand=True, padx=10, pady=10)
+        self.staff_tree = tree
 
         staff_list = self.auth_service.list_staff()
+        self._staff_user_id_map = {}
         for s in staff_list:
             workload = self.ticket_service.get_staff_workload(s.staff_id)
             tree.insert("", "end", iid=str(s.staff_id), values=(
                 s.staff_id, s.full_name, s.username, s.specialty or "General",
                 workload["pending"], workload["completed"]
             ))
+            self._staff_user_id_map[str(s.staff_id)] = (s.user_id, s.full_name)
+
+        actions = tk.Frame(table_card, bg=theme.CARD_BG)
+        actions.pack(fill="x", padx=10, pady=(0, 10))
+        DangerButton(actions, "Delete Staff", command=self._delete_selected_staff).pack(side="left")
+
+    def _delete_selected_staff(self):
+        sel = self.staff_tree.selection()
+        if not sel:
+            show_error("Please select a staff member.")
+            return
+        user_id, name = self._staff_user_id_map[sel[0]]
+        workload = self.ticket_service.get_staff_workload(int(sel[0]))
+        warning = f"Delete {name}? This cannot be undone."
+        if workload["pending"] > 0:
+            warning += (f"\n\nThey have {workload['pending']} pending ticket(s) — "
+                        "these will become unassigned.")
+        if confirm(warning):
+            self.auth_service.delete_user(user_id)
+            show_success("Staff member deleted.")
+            self.show_view("staff")
 
     def _open_staff_form(self):
         self.clear_content()
@@ -656,19 +679,45 @@ class TicketDetailView(tk.Frame):
 
             if self.admin_mode:
                 tk.Label(cinner, text="Assign to:", bg=theme.CARD_BG, font=theme.FONT_SMALL).grid(row=0, column=0, sticky="w")
+
                 staff_list = self.auth_service.list_staff()
-                staff_map = {f"{s.full_name} ({s.specialty})": s.staff_id for s in staff_list}
-                assign_combo = ttk.Combobox(cinner, values=list(staff_map.keys()), state="readonly", width=26)
+                category_name = t["category_name"]
+
+                def specialty_matches(specialty):
+                    if not specialty or not category_name:
+                        return False
+                    s, c = specialty.lower(), category_name.lower()
+                    return c in s or s in c
+
+                matching = [s for s in staff_list if specialty_matches(s.specialty)]
+                others = [s for s in staff_list if s not in matching]
+                ordered = matching + others
+
+                staff_map = {}
+                option_labels = []
+                for s in ordered:
+                    is_match = s in matching
+                    label = f"{'⭐ ' if is_match else ''}{s.full_name} ({s.specialty})" \
+                            f"{' — recommended' if is_match else ''}"
+                    staff_map[label] = s.staff_id
+                    option_labels.append(label)
+
+                assign_combo = ttk.Combobox(cinner, values=option_labels, state="readonly", width=32)
                 assign_combo.grid(row=1, column=0, padx=(0, 8))
+                if matching:
+                    assign_combo.set(option_labels[0])
 
                 def do_assign():
                     if not assign_combo.get():
                         show_error("Select a staff member.")
                         return
-                    self.ticket_service.assign_ticket(
-                        self.ticket_id, staff_map[assign_combo.get()], self.current_user.user_id)
-                    show_success("Ticket assigned.")
-                    self._refresh()
+                    try:
+                        self.ticket_service.assign_ticket(
+                            self.ticket_id, staff_map[assign_combo.get()], self.current_user.user_id)
+                        show_success("Ticket assigned.")
+                        self._refresh()
+                    except Exception as e:
+                        show_error(f"Could not assign ticket:\n{e}")
 
                 PrimaryButton(cinner, "Assign", command=do_assign).grid(row=1, column=1)
 
@@ -679,9 +728,12 @@ class TicketDetailView(tk.Frame):
                 pri_combo.grid(row=1, column=2, padx=(16, 8))
 
                 def do_priority():
-                    self.ticket_service.update_priority(self.ticket_id, pri_combo.get(), self.current_user.user_id)
-                    show_success("Priority updated.")
-                    self._refresh()
+                    try:
+                        self.ticket_service.update_priority(self.ticket_id, pri_combo.get(), self.current_user.user_id)
+                        show_success("Priority updated.")
+                        self._refresh()
+                    except Exception as e:
+                        show_error(f"Could not update priority:\n{e}")
 
                 PrimaryButton(cinner, "Update", command=do_priority).grid(row=1, column=3)
 
@@ -693,9 +745,12 @@ class TicketDetailView(tk.Frame):
             status_combo.grid(row=status_row + 1, column=0, padx=(0, 8))
 
             def do_status():
-                self.ticket_service.update_status(self.ticket_id, status_combo.get(), self.current_user.user_id)
-                show_success("Status updated.")
-                self._refresh()
+                try:
+                    self.ticket_service.update_status(self.ticket_id, status_combo.get(), self.current_user.user_id)
+                    show_success("Status updated.")
+                    self._refresh()
+                except Exception as e:
+                    show_error(f"Could not update status:\n{e}")
 
             PrimaryButton(cinner, "Update Status", command=do_status).grid(row=status_row + 1, column=1, pady=(10, 0))
 

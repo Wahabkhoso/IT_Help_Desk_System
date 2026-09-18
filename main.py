@@ -8,6 +8,8 @@ Run with:
 """
 
 import tkinter as tk
+from tkinter import messagebox
+import traceback
 
 from database.database import get_db
 from utils.seed_data import seed
@@ -39,6 +41,21 @@ class HelpDeskApp(tk.Tk):
         self.current_screen = None
         self._set_window_size(*LOGIN_SIZE)
         self.show_role_select()
+
+    def report_callback_exception(self, exc_type, exc_value, exc_tb):
+        """Tkinter normally swallows exceptions raised inside button clicks
+        and other event callbacks — when the app is packaged as a windowed
+        .exe (no console), this makes real bugs look like "nothing
+        happened" with no error at all. Overriding this shows a proper
+        error dialog instead, so problems are visible and reportable."""
+        error_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        print(error_text)  # still useful when running from source/console
+        messagebox.showerror(
+            "Unexpected Error",
+            f"Something went wrong:\n\n{exc_value}\n\n"
+            "If this keeps happening, please note what you were doing "
+            "and share this message."
+        )
 
     def _set_window_size(self, width, height):
         """Resize and re-center the window on screen. Used to keep the

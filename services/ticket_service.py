@@ -90,6 +90,18 @@ class TicketService:
     def reopen_ticket(self, ticket_id, changed_by_user_id):
         self.update_status(ticket_id, "Reopened", changed_by_user_id)
 
+    def delete_ticket(self, ticket_id, requesting_user_id=None, requesting_role=None):
+        """Deletes a ticket permanently (comments and history cascade with
+        it). If requesting_user_id/role are given, only the ticket's own
+        submitter or an admin may delete it — a defense-in-depth check on
+        top of whatever the UI already restricts."""
+        ticket = self.get_ticket(ticket_id)
+        if ticket is None:
+            raise ValidationError("Ticket not found.")
+        if requesting_role and requesting_role != "admin" and ticket.user_id != requesting_user_id:
+            raise ValidationError("You can only delete your own tickets.")
+        self.db.execute("DELETE FROM tickets WHERE ticket_id = ?", (ticket_id,))
+
     # ------------------------------------------------------------------
     # Comments
     # ------------------------------------------------------------------

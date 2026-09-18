@@ -12,7 +12,7 @@ from utils.validators import ValidationError
 from utils import theme
 from ui.sidebar import Sidebar
 from ui.widgets import (
-    PrimaryButton, SecondaryButton, Card, TopBar, styled_treeview, row_tags,
+    PrimaryButton, SecondaryButton, DangerButton, Card, TopBar, styled_treeview, row_tags,
     show_error, show_success, confirm
 )
 from ui.admin_dashboard import TicketDetailView
@@ -97,6 +97,7 @@ class UserDashboard(tk.Frame):
         actions.pack(fill="x", padx=10, pady=(0, 10))
         PrimaryButton(actions, "View Details", command=self._open_detail).pack(side="left")
         SecondaryButton(actions, "Close Resolved Ticket", command=self._close_ticket).pack(side="left", padx=8)
+        DangerButton(actions, "Delete Ticket", command=self._delete_ticket).pack(side="left", padx=8)
 
         rows = self.ticket_service.search_tickets(for_user_id=self.user.user_id)
         self._populate(rows)
@@ -138,6 +139,21 @@ class UserDashboard(tk.Frame):
             self.ticket_service.close_ticket(ticket_id, self.user.user_id)
             show_success("Ticket closed.")
             self.build_my_tickets_view()
+
+    def _delete_ticket(self):
+        sel = self.tree.selection()
+        if not sel:
+            show_error("Please select a ticket first.")
+            return
+        ticket_id = int(sel[0])
+        if confirm("Delete this ticket permanently? This cannot be undone."):
+            try:
+                self.ticket_service.delete_ticket(
+                    ticket_id, requesting_user_id=self.user.user_id, requesting_role="employee")
+                show_success("Ticket deleted.")
+                self.build_my_tickets_view()
+            except Exception as e:
+                show_error(f"Could not delete ticket:\n{e}")
 
     # ==================================================================
     def build_new_ticket_view(self):
